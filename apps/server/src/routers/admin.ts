@@ -561,11 +561,16 @@ export default os.router({
         .use(requiredAuth("ADMIN"))
         .use(requiredScopes("elevated"))
         .handler(async (req) => {
-            const { from, to, dryRun, limit, after } = req.input;
+            const { id, from, to, dryRun, limit, after } = req.input;
+
+            if (!id && (from == null || to == null))
+                return apiErr("MISSING_PARAMS", "Provide either a timelapse ID or both ends of a window.");
 
             const candidates = await database().timelapse.findMany({
                 where: {
-                    createdAt: { gte: new Date(from), lte: new Date(to) },
+                    ...(id
+                        ? { id }
+                        : { createdAt: { gte: new Date(from!), lte: new Date(to!) } }),
                     hackatimeProject: { not: null },
                     associatedJobId: null,
                     visibility: { not: "FAILED_PROCESSING" },
@@ -584,6 +589,10 @@ export default os.router({
             const pending = candidates.filter(x => x.snapshots.length > 0);
             const sampleIds = pending.slice(0, 10).map(x => x.id);
             const nextCursor = candidates.length === limit ? candidates[candidates.length - 1].id : null;
+
+            if (id && pending.length === 0) {
+                return apiErr("NOT_FOUND", "That timelapse can't be resynced: it needs a Hackatime project, snapshots, a linked Hackatime account, and to have finished processing.");
+            }
 
             if (dryRun) {
                 return apiOk({ scanned: pending.length, pushed: 0, failed: 0, sampleIds, nextCursor });

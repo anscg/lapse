@@ -1205,6 +1205,7 @@ function AdminEntityTable({ entity, query, onQueryChange, highlightedId }: {
   const [actionStatus, setActionStatus] = useState<{ message: string; kind: "success" | "error" } | null>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
   const [resyncOpen, setResyncOpen] = useState(false);
+  const [resyncId, setResyncId] = useState("");
   const [resyncFrom, setResyncFrom] = useState(() => new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString());
   const [resyncTo, setResyncTo] = useState(() => new Date().toISOString());
   const [resyncError, setResyncError] = useState<string | null>(null);
@@ -1283,21 +1284,29 @@ function AdminEntityTable({ entity, query, onQueryChange, highlightedId }: {
     setActionsOpen(false);
     setResyncError(null);
     setResyncStatus(null);
+    setResyncId("");
     setResyncOpen(true);
   }
 
   async function handleResyncHackatime(dryRun: boolean) {
-    const from = Date.parse(resyncFrom);
-    const to = Date.parse(resyncTo);
+    const targeted = resyncId.trim();
+    let window: { from: number; to: number } | null = null;
 
-    if (Number.isNaN(from) || Number.isNaN(to)) {
-      setResyncError("Both dates need to be valid ISO timestamps.");
-      return;
-    }
+    if (!targeted) {
+      const from = Date.parse(resyncFrom);
+      const to = Date.parse(resyncTo);
 
-    if (from > to) {
-      setResyncError("The start of the window has to come before the end.");
-      return;
+      if (Number.isNaN(from) || Number.isNaN(to)) {
+        setResyncError("Both dates need to be valid ISO timestamps.");
+        return;
+      }
+
+      if (from > to) {
+        setResyncError("The start of the window has to come before the end.");
+        return;
+      }
+
+      window = { from, to };
     }
 
     setResyncError(null);
@@ -1311,7 +1320,11 @@ function AdminEntityTable({ entity, query, onQueryChange, highlightedId }: {
       let failed = 0;
 
       do {
-        const res = await api.admin.resyncHackatime({ from, to, dryRun, ...(cursor ? { after: cursor } : {}) });
+        const res = await api.admin.resyncHackatime({
+          ...(targeted ? { id: targeted } : window!),
+          dryRun,
+          ...(cursor ? { after: cursor } : {})
+        });
         if (!res.ok)
           throw new Error(res.message);
 
@@ -1420,6 +1433,10 @@ function AdminEntityTable({ entity, query, onQueryChange, highlightedId }: {
         />
 
         <ModalContent className="gap-4 text-base">
+          <AdminFieldRow label="Timelapse ID">
+            <TextInput type="text" value={resyncId} onChange={setResyncId} />
+          </AdminFieldRow>
+
           <AdminFieldRow label="From">
             <TextInput type="text" value={resyncFrom} onChange={setResyncFrom} />
           </AdminFieldRow>
@@ -1430,7 +1447,8 @@ function AdminEntityTable({ entity, query, onQueryChange, highlightedId }: {
 
           <p className="text-sm text-muted">
             Only timelapses with a Hackatime project are affected. Hackatime discards heartbeats it already
-            holds, so timelapses that synced normally are left alone. Dry run first.
+            holds, so timelapses that synced normally are left alone. Dry run first. Filling in an ID
+            resyncs just that timelapse and ignores the window.
           </p>
 
           <ModalError error={resyncError} />

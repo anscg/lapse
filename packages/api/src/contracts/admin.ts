@@ -252,10 +252,13 @@ export const adminRouterContract = {
         .route({ description: "Re-pushes Hackatime heartbeats for timelapses created within a window, for recovering from a Hackatime outage. Only affects timelapses that have a Hackatime project set. Hackatime discards heartbeats it already holds, so timelapses that synced normally are left untouched. Requires administrator permissions and an `elevated` grant." })
         .input(
             z.object({
-                from: LapseDate
+                id: LapseId.optional()
+                    .describe("Resyncs only this timelapse. Takes precedence over the window."),
+
+                from: LapseDate.optional()
                     .describe("Start of the window, matched against the timelapse's creation date."),
 
-                to: LapseDate
+                to: LapseDate.optional()
                     .describe("End of the window, matched against the timelapse's creation date."),
 
                 dryRun: z.boolean().default(true)
